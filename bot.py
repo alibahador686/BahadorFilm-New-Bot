@@ -101,17 +101,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     stats_data["total_visits"] += 1
     stats_data["unique_users"].add(user.id)
-    
+
     welcome_text = (
         f"سلام {user.first_name} عزیز! 🎬\n\n"
-        "**به ربات رسمی موسسه هنری بهادر فیلم خوش آمدید**\n\n"
-        "به مدیریت **علی بهادر** - کارگردان، تهیه‌کننده و نویسنده (دارای کارشناسی ارشد ادبیات نمایشی و لیسانس کارگردانی از دانشکده صداوسیما با بیش از چهار دهه تجربه حرفه‌ای در ساخت سریال، مستندهای فاخر تلویزیونی، تیزر، آگهی و انیمیشن).\n\n"
-        "لطفاً بخش مورد نظر خود را از منوی زیر انتخاب کنید:"
+        f"به ربات رسمی موسسه هنری بهادر فیلم خوش‌آمدید**\n\n"
+        f"**به مدیریت علی بهادر** - کارگردان، تهیه‌کننده و نویسنده (دارای کارشناسی ارشد ادبیات نمایشی و لیسانس کارگردانی از دانشکده صداوسیما با بیش از چهار دهه تجربه حرفه‌ای در ساخت سریال، مستندهای فاخر تلویزیونی، تیزر، آگهی و انیمیشن)\n\n"
+        "لطفاً بخش مورد نظر خود را از منوی زیر انتخاب کنید"
     )
-    
+
     header_photo = get_rotational_photo()
-    
-if update.callback_query:
+
+    if update.callback_query:
         query = update.callback_query
         await query.answer()
         try:
@@ -130,8 +130,6 @@ if update.callback_query:
             reply_markup=get_main_menu(),
             parse_mode="MarkDown"
         )
-
-async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_CHAT_ID:
         return
     text = (
