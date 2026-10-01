@@ -1,249 +1,623 @@
 import os
+import logging
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
 import random
-import telebot
-from flask import Flask, request
-from telebot import types
+from datetime import datetime
 
-# === توکن ربات شما ===
-TOKEN = "8584661357:AAFN7Sl0_H0bOG-M8Og9tyYIDexQKu_0N_k"  # توکن اصلی ربات خود را اینجا قرار دهید
-bot = telebot.TeleBot(TOKEN)
+# === ایجاد وب‌سرور داخلی برای سازگاری ۱۰۰٪ با Render و مانیتورینگ UptimeRobot ===
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
+        
+    def log_message(self, format, *args):
+        pass
 
-# === راه‌اندازی سرور وب Flask برای سازگاری با Render و UptimeRobot ===
-app = Flask(__name__)
+def run_http_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    server.serve_forever()
 
-@app.route('/')
-def home():
-    return "Bahador Film Bot is running live and active!"
+# استارت کردن وب‌سرور در پس‌زمینه هم‌زمان با ربات
+threading.Thread(target=run_http_server, daemon=True).start()
 
-# مسیر وب‌هوک برای دریافت پیام‌ها از تلگرام
-@app.route(f'/{TOKEN}', methods=['POST'])
-def webhook():
-    if request.headers.get('content-type') == 'application/json':
-        json_string = request.get_data().decode('utf-8')
-        update = telebot.types.Update.de_json(json_string)
-        bot.process_new_updates([update])
-        return "OK", 200
-    else:
-        return "Forbidden", 403
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    ApplicationBuilder,
+    ContextTypes,
+    CommandHandler,
+    CallbackQueryHandler,
+    MessageHandler,
+    filters,
+    ConversationHandler,
+)
 
-# === حافظه موقت برای آمار و سفارشات ===
-bot_stats = {
+# تنظیمات لاگینگ
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# توکن ربات خوانده شده از متغیرهای محیطی رندر یا مقدار پیش‌فرض شما
+TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8584661357:AAFN7Sl0_H0bOG-M8Og9tyYIDexQKu_0N_k")
+
+# آیدی عددی ادمین برای دریافت مستقیم پیام‌ها و سفارش‌ها
+ADMIN_CHAT_ID = int(os.environ.get("ADMIN_CHAT_ID", "198728977"))
+
+# نگاشت کامل شناسه‌های تلگرامی عکس‌ها (File IDs) مربوط به آثار، مستندها، کتاب‌ها، جوایز و لوگو
+PHOTO_IDS = {
+    "logo": "AgACAgQAAxkBAANoarTxcvaLVFFDuPSMVCLQ6XXcCEgAAj8QaxslQqhRHyuGPLEPCTYBAAMCAAN5AAM9BA",
+    "work_1": "AgACAgQAAxkBAANZarTpN4VZ_zuBvY8qfr8XmbNw7pkAAjQQaxslQqhRXfvpAAFEs83zAQADAgADeQADPQQ",
+    "work_2": "AgACAgQAAxkBAANearTvmlgwxRnFLGAlGWxU8rkT-1AAAjgQaxslQqhR53FaIRSpKHYBAAMCAAN5AAM9BA",
+    "work_3": "AgACAgQAAxkBAANgarTwM3C7YugVl34Zx5zmdfqblxEAAjoQaxslQqhRjoQOS53pRBEBAAMCAAN5AAM9BA",
+    "work_4": "AgACAgQAAxkBAANiarTwitFl3GizqfXA940Rm6KoAywAAjsQaxslQqhRLcDSK7px4JIBAAMCAAN5AAM9BA",
+    "work_5": "AgACAgQAAxkBAANkarTw6xfxZ84odXO_PlgJBVLWvY8AAjwQaxslQqhR3hmwjUYRM0wBAAMCAAN5AAM9BA",
+    "work_6": "AgACAgQAAxkBAANmarTxHy9f8plmCbwBwH-n-0U3eUcAAj4QaxslQqhR79dvxxWcmpIBAAMCAAN5AAM9BA",
+    "work_7": "AgACAgQAAxkBAANoarTxcvaLVFFDuPSMVCLQ6XXcCEgAAj8QaxslQqhRHyuGPLEPCTYBAAMCAAN5AAM9BA",
+    "work_8": "AgACAgQAAxkBAANqarTxuueYW1gjMcHlaCaDZJXtJ1EAAkEQaxslQqhR-aYKXskUhHIBAAMCAAN5AAM9BA",
+    "work_9": "AgACAgQAAxkBAANsarTx9X_9z_IFk7DvWGmtVGkGB0AAAkIQaxslQqhRUjAa4c-6XLwBAAMCAAN5AAM9BA",
+    "work_10": "AgACAgQAAxkBAANuarTyOwkGmkfs6tcNodNBGzujgCwAAkMQaxslQqhRRxnzoph9E4EBAAMCAAN5AAM9BA",
+    "work_11": "AgACAgQAAxkBAANwarTyYMpvBUdAvWgxpNDsokdZzAkAAkQQaxslQqhR0jS6MO2oIdQBAAMCAAN5AAM9BA",
+    "work_12": "AgACAgQAAxkBAANyarTyuYCz-nKqjilkshH7l-IZl_8AAkUQaxslQqhR_zB2Ple2rxMBAAMCAAN5AAM9BA",
+    "work_13": "AgACAgQAAxkBAAN0arTz_Q5l6uW9hJ3uQ1wAARXGq78AAkYQaxslQqhR6m1k_3_5-1wBAAMCAAN5AAM9BA",
+    "work_14": "AgACAgQAAxkBAAN2arT0a6YpX7aK5f8v8x5Y1AABAAH8AAkcAaxslQqhR8p9kZ9l_3AEBAAMCAAN5AAM9BA",
+    "award_15": "AgACAgQAAxkBAAOBarT63lwTbK1i98T2La7qVD3q4gEAAlQQaxslQqhRbvL3WI2R2JkBAAMCAAN5AAM9BA",
+    "award_16": "AgACAgQAAxkBAAODarT69lI0d1-rQQs-AwTKjAO7WQsAAlUQaxslQqhRpgYVe0-1E6QBAAMCAAN5AAM9BA",
+    "award_17": "AgACAgQAAxkBAAOFarT7AAH5vKOpDySxkrpJFz3UX-5eAAJWEGsbJUKoUTD95jq44Ny8AQADAgADeQADPQQ",
+    "award_18": "AgACAgQAAxkBAAOHarT7Ecmh4vTKQmVMRKyi95ijsXYAAlcQaxslQqhR703ya5-kizwBAAMCAAN5AAM9BA",
+    "award_19": "AgACAgQAAxkBAAOJarT7JWk3v6x2f7W4V6_1a8q3b68AAloQaxslQqhR9p1kZ9l_3AEBAAMCAAN5AAM9BA",
+    "award_20": "AgACAgQAAxkBAAOLarT7O91v6x2f7W4V6_1a8q3b69AAlsQaxslQqhR5p1kZ9l_3AEBAAMCAAN5AAM9BA"
+}
+
+stats_data = {
     "total_visits": 0,
     "unique_users": set(),
-    "orders": []
+    "orders_count": 0,
+    "messages_count": 0
 }
 
-# === گالری آثار برای نمایش رندوم عکس و معرفی در منوی استارت ===
-ARTWORKS_GALLERY = [
-    {
-        "caption": "🎬 **سریال ماندگار «شب هزار و یکم»**\nکارگردان: استاد علی بهادر (پخش از شبکه ۱ سیما - درباره پزشکان در دفاع مقدس)",
-        "photo": "https://via.placeholder.com/600x400.png?text=Shabe+Hezaro+Yekom"
-    },
-    {
-        "caption": "🎬 **سریال محبوب «بهترین تابستان من»**\nپرمخاطب‌ترین مجموعه طنز دفاع مقدس به کارگردانی استاد علی بهادر",
-        "photo": "https://via.placeholder.com/600x400.png?text=Behtarin+Tabestane+Man"
-    },
-    {
-        "caption": "📚 **کتاب مرجع ملی «گاز، انرژی پاک با نیم قرن تلاش»**\nتألیف استاد علی بهادر - رونمایی با حضور ریاست محترم جمهوری",
-        "photo": "https://via.placeholder.com/600x400.png?text=Gas+Reference+Book"
-    },
-    {
-        "caption": "🎬 **سریال تلویزیونی «عشق سال‌های جنگ»**\nبه کارگردانی استاد علی بهادر (پخش از شبکه ۳ سیما)",
-        "photo": "https://via.placeholder.com/600x400.png?text=Eshghe+Salhaye+Jang"
-    },
-    {
-        "caption": "🌍 **مجموعه مستند برون‌مرزی «نوروز در ازبکستان»**\nبرنده دو جایزه بهترین تهیه‌کنندگی و تدوین از جشنواره صدا و سیما",
-        "photo": "https://via.placeholder.com/600x400.png?text=Norooz+In+Uzbekistan"
-    }
-]
+PROJECT_TYPE, USER_NAME, USER_PHONE = range(3)
+ADMIN_MESSAGE = range(1)
 
-# === محتوای کامل رزومه و منوهای مؤسسه هنری بهادر فیلم ===
-CONTENT = {
-    "about_ceo": (
-        "👤 **درباره مدیرعامل مؤسسه هنری بهادر فیلم**\n\n"
-        "**استاد علی بهادر**\n"
-        "• کارگردان، تهیه‌کننده، نویسنده و تدوینگر سینما و تلویزیون\n"
-        "• تحصیلات: لیسانس کارگردانی از دانشکده صدا و سیما و کارشناس ارشد ادبیات نمایشی\n"
-        "• پیشکسوت و بازنشسته خوش‌نام سازمان صدا و سیما\n"
-        "• شروع فعالیت خبری در همدان از سال ۱۳۶۰ و بیش از ۱۸ ماه حضور در پوشش رسانه‌ای دوران دفاع مقدس\n"
-        "• پدیدآورنده و مؤلف آثار مرجع مکتوب و مستندهای کلان ملی\n"
-        "• مدیرعامل مؤسسه فرهنگی-هنری بهادر فیلم"
-    ),
-    "services": (
-        "📦 **پکیج‌های خدمات تخصصی مؤسسه بهادر فیلم**\n\n"
-        "1️⃣ **تولیدات نمایشی و تلویزیونی:** ساخت سریال‌های داستانی، تله‌فیلم، فیلم‌های سینمایی و ویدئویی بلند و کوتاه.\n"
-        "2️⃣ **مستندسازی کلان و تخصصی:** تولید مستندهای صنعتی، تاریخی، پژوهشی و مجموعه‌های تلویزیونی کلان (همکاری‌های گسترده ملی با صنعت نفت و گاز کشور).\n"
-        "3️⃣ **تولیدات بین‌المللی:** ساخت مستندهای برون‌مرزی در کشورهای تاجیکستان، ازبکستان، ترکمنستان، قزاقستان و...\n"
-        "4️⃣ **انیمیشن و موشن‌گرافیک:** تولید مجموعه‌های انیمیشن طنز و آموزشی موزیکال (مانند «اسرافی و انصافی»).\n"
-        "5️⃣ **آموزش و مشاوره تخصصی:** مشاوره‌های حرفه‌ای در حوزه کارگردانی، نگارش فیلمنامه، تدوین پیشرفته و تدوین کتب مرجع ملی."
-    ),
-    "portfolio": (
-        "🎬 **رزومه کامل و آرشیو آثار استاد علی بهادر**\n\n"
-        "📚 **الف) تألیفات و پروژه‌های ویژه ملی:**\n"
-        "• **کتاب مرجع «گاز، انرژی پاک با نیم قرن تلاش»:** (چاپ و انتشار در سال ۱۳۹۵) تدوین، گردآوری و تألیف کتاب مرجع ملی صنعت گاز کشور که طی مراسمی رسمی در پنجمین دهه تأسیس شرکت ملی گاز ایران با حضور **ریاست محترم جمهوری اسلامی ایران** رونمایی شد (همراه با تولید مجموعه مستند پژوهشی ۶۳ قسمتی).\n\n"
-        "📺 **ب) سریال‌های تلویزیونی، سینمایی و داستانی کوتاه:**\n"
-        "• **شب هزار و یکم:** (۱۳۸۷-۱۳۸۸) کارگردانی سریال ۲۳ قسمتی با موضوع پزشکان در دفاع مقدس (پخش از شبکه ۱ سیما)\n"
-        "• **عشق سال‌های جنگ:** (۱۳۸۰) کارگردانی و تهیه‌کنندگی مشترک سریال ۱۳ قسمتی (پخش از شبکه ۳ سیما)\n"
-        "• **بهترین تابستان من:** (۱۳۷۲) کارگردانی سریال ۸ قسمتی طنز دفاع مقدس (پرمخاطب‌ترین مجموعه سیما در زمان پخش و بازپخش‌های متعدد)\n"
-        "• **قدم زدن در بهشت:** (۱۳۹۱-۱۳۹۳) کارگردانی تله‌فیلم سینمایی-تلویزیونی با نوگرایی خاص\n"
-        "• **مجموعه برکت:** (۱۳۹۷) تهیه‌کنندگی و کارگردانی مینی‌سریال ۴ قسمتی\n"
-        "• **مجموعه مشتری‌مداری:** (۱۴۰۰) تهیه‌‌کنندگی و کارگردانی سریال آموزشی ۳۰ قسمتی\n"
-        "• **فیلم‌های ویدئویی سینمایی:** «ارثیه پرماجرا» و «شاهزاده و گدا» (تهیه‌کنندگی - ۱۳۹۳)\n"
-        "• **فیلم‌های داستانی کوتاه:** «آن شب» و «گردنبند» (موضوع دفاع مقدس)\n\n"
-        "🌍 **ج) بخش مستند، پژوهشی و مجموعه‌های تلویزیونی کلان:**\n"
-        "• **روایتی از رسانه:** (۱۴۰۳-۱۴۰۴) تهیه‌‌کنندگی و کارگردانی مجموعه مستند تحقیقی-پژوهشی ۱۸ قسمتی با موضوع بررسی ویژگی‌های مدیریت رسانه در دوران ریاست آقایان محمد هاشمی، شهید علی لاریجانی و عزت‌الله ضرغامی\n"
-        "• **مستند زندگی:** (۱۳۷۰) برنده ۳ جایزه از جشنواره فیلم دفاع مقدس، جشنواره رشد و جشنواره همدان\n"
-        "• **مستندهای برون‌مرزی:** «نوروز در ازبکستان» (برنده ۲ جایزه بهترین تهیه‌کنندگی و تدوین)، «بدخشان بام جهان» (تاجیکستان)، نوروز در تاجیکستان، قزاقستان و ترکمنستان\n"
-        "• **مجموعه‌های معارفی و ملی:** «دعای جوشن کبیر»، «قوسیان خاک»، «نخل‌های صبور»، «عطر میعاد» (حج)، «حج اکبر» (شبکه العالم)، «بچه‌های مسجد» (شبکه ۵)، «نسیم کوثر» (شبکه مستند)، «تلاش بی‌پایان» (اورهال صنعت گاز - ۱۴۰۴) و مستندهای متعدد صنعتی و گازی.\n\n"
-        "🌐 **برای مشاهده جزئیات تکمیلی و گالری آثار:**\n"
-        "alibahador.ir"
-    ),
-    "process": (
-        "⚙️ **فرآیند کار در مؤسسه بهادر فیلم**\n\n"
-        "1️⃣ **جلسه مشاوره و نیازسنجی:** بررسی دقیق اهداف، محتوا و مخاطبان پروژه\n"
-        "2️⃣ **نگارش و پژوهش:** تدوین طرح توجیهی، سناریو و ساختار پژوهشی اثر\n"
-        "3️⃣ **پیش‌تولید حرفه‌ای:** انتخاب عوامل، تجهیزات به‌روز و برنامه‌ریزی دقیق تولید\n"
-        "4️⃣ **تولید و پس‌تولید (تصویربرداری و تدوین):** اجرای استاندارد تصویربرداری و نظارت مستقیم استاد علی بهادر بر تدوین، اصلاح رنگ و خروجی نهایی"
-    ),
-    "gift": (
-        "🎁 **هدیه رایگان (فایل راهنما)**\n\n"
-        "فایل‌های راهنما، مقالات تخصصی کارگردانی و جزوات آموزشی سینما به‌زودی در این بخش بارگذاری خواهد شد."
-    ),
-    "digital_card": (
-        "💳 **کارت ویزیت دیجیتال**\n\n"
-        "🏢 **مؤسسه فرهنگی-هنری بهادر فیلم**\n"
-        "👤 مدیرعامل: استاد علی بهادر (کارگردان و تهیه‌کننده پیشکسوت صدا و سیما)\n"
-        "🎯 ارائه‌دهنده خدمات تخصصی فیلم‌سازی، مستندسازی ملی و بین‌المللی و آموزش رسانه\n"
-        "🌐 وبسایت رسمی: alibahador.ir"
-    ),
-    "media": (
-        "📰 **مصاحبه‌ها و رسانه**\n\n"
-        "• انتشار مقاله تخصصی **«۱۲ نگاه به سینمای مستند؛ از چالش‌ها تا فرصت‌ها»** در روزنامه اطلاعات (۲۰ مرداد ۱۴۰۵)\n"
-        "• مصاحبه‌ها و گفتگوهای تخصصی با صدا و سیما تحت عنوان «تصویر مقاومت در آیینه رسانه» و بازتاب حضور در رسانه‌های جمعی کشور."
-    ),
-    "faq": (
-        "❓ **پرسش‌های متداول (FAQ)**\n\n"
-        "• **جایزه ویژه سفارش کار چیست؟**\n"
-        "در صورت ثبت سفارش هر پروژه، یک تیزر یا کلیپ یک‌دقیقه‌ای به‌صورت **رایگان** به سفارش‌دهنده تحویل داده خواهد شد!\n"
-        "• **ساعات پاسخگویی ربات و پشتیبانی چگونه است؟**\n"
-        "همکاران ما هر روز از **ساعت ۹ صبح تا ۲۰** آماده پاسخگویی و دریافت سفارشات شما هستند."
-    ),
-    "newsletter": (
-        "🔔 **خبرنامه آموزشی**\n\n"
-        "دریافت آخرین مقالات آموزشی کارگردانی، یادداشت‌های تخصصی و اطلاعیه‌های جدید مؤسسه بهادر فیلم."
-    )
-}
+def get_rotational_photo():
+    """انتخاب هوشمندانه پوستر از میان آرشیو"""
+    all_keys = list(PHOTO_IDS.keys())
+    day_of_year = datetime.now().timetuple().tm_yday
+    selected_key = all_keys[day_of_year % len(all_keys)]
+    return PHOTO_IDS.get(selected_key, PHOTO_IDS["logo"])
 
-# === منوی اصلی ۱۱ تایی شکیل و مرتب ===
-def main_menu_keyboard():
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    btn1 = types.KeyboardButton("🎬 نمونه کارها و رزومه کامل")
-    btn2 = types.KeyboardButton("👤 درباره مدیرعامل")
-    btn3 = types.KeyboardButton("💬 ارسال پیام به مدیریت")
-    btn4 = types.KeyboardButton("💳 کارت ویزیت دیجیتال")
-    btn5 = types.KeyboardButton("📦 پکیج‌های خدمات")
-    btn6 = types.KeyboardButton("💬 ثبت سفارش و درخواست مشاوره")
-    btn7 = types.KeyboardButton("📰 مصاحبه‌ها و رسانه")
-    btn8 = types.KeyboardButton("❓ پرسش‌های متداول (FAQ)")
-    btn9 = types.KeyboardButton("🎁 هدیه رایگان (فایل راهنما)")
-    btn10 = types.KeyboardButton("⚙️ فرآیند کار ما")
-    btn11 = types.KeyboardButton("🔔 خبرنامه آموزشی")
-    
-    markup.add(btn1, btn2)
-    markup.add(btn3, btn4)
-    markup.add(btn5, btn6)
-    markup.add(btn7, btn8)
-    markup.add(btn9, btn10)
-    markup.add(btn11)
-    return markup
+def get_main_menu():
+    keyboard = [
+        [InlineKeyboardButton("🛒 ثبت سفارش و درخواست مشاوره", callback_data="start_order")],
+        [InlineKeyboardButton("📺 نمونه کارها و رزومه تصویری", callback_data="portfolio")],
+        [InlineKeyboardButton("ℹ️ درباره مدیرعامل و موسسه", callback_data="about")],
+        [InlineKeyboardButton("💳 کارت ویزیت دیجیتال", callback_data="digital_card")],
+        [InlineKeyboardButton("✉ ارسال پیام به مدیریت", callback_data="contact_admin")],
+        [InlineKeyboardButton("📋 خدمات و تعرفه‌ها", callback_data="services")],
+        [InlineKeyboardButton("📰 مصاحبه‌ها و رسانه", callback_data="interviews")],
+        [InlineKeyboardButton("❓ پرسش‌های متداول (FAQ)", callback_data="faq")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
 
-# === استارت ربات و نمایش عکس رندوم آثار ===
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    chat_id = message.chat.id
-    bot_stats["total_visits"] += 1
-    bot_stats["unique_users"].add(chat_id)
-    
-    random_artwork = random.choice(ARTWORKS_GALLERY)
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    stats_data["total_visits"] += 1
+    stats_data["unique_users"].add(user.id)
     
     welcome_text = (
-        f"{random_artwork['caption']}\n\n"
-        "مؤسسه فرهنگی هنری بهادر فیلم 🎬\n\n"
-        "🎁 **ویژه سفارش‌دهندگان:** با ثبت سفارش در ربات، یک تیزر یا کلیپ یک‌دقیقه‌ای به‌صورت **رایگان** هدیه بگیرید!\n"
-        "⏰ **ساعات پاسخگویی:** همواره از ساعت ۹ صبح تا ۲۰ آماده خدمت‌رسانی هستیم.\n\n"
-        "👇 از منوی زیر انتخاب کنید:"
+        f"سلام {user.first_name} عزیز! 🎬\n\n"
+        "**به ربات رسمی موسسه هنری بهادر فیلم خوش آمدید**\n\n"
+        "به مدیریت **علی بهادر** - کارگردان، تهیه‌‌کننده و نویسنده (دارای کارشناسی ارشد ادبیات نمایشی و لیسانس کارگردانی از دانشکده صداوسیما با بیش از چهار دهه تجربه حرفه‌ای در ساخت سریال، مستندهای فاخر تلویزیونی، تیزر، آگهی و انیمیشن).\n\n"
+        "لطفاً بخش مورد نظر خود را از منوی زیر انتخاب کنید:"
+    )
+    
+    header_photo = get_rotational_photo()
+    
+    if update.callback_query:
+        query = update.callback_query
+        await query.answer()
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        await context.bot.send_photo(
+            chat_id=query.message.chat_id,
+            photo=header_photo,
+            caption=welcome_text,
+            reply_markup=get_main_menu(),
+            parse_mode="Markdown"
+        )
+    elif update.message:
+        await update.message.reply_photo(
+            photo=header_photo,
+            caption=welcome_text,
+            reply_markup=get_main_menu(),
+            parse_mode="Markdown"
+        )
+
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_CHAT_ID:
+        return
+    text = (
+        "📊 **آمار ربات مؤسسه هنری بهادر فیلم:**\n\n"
+        f"👥 کل بازدیدها: {stats_data['total_visits']}\n"
+        f"👤 کاربران یکتا: {len(stats_data['unique_users'])}\n"
+        f"🛒 سفارش‌های ثبت شده: {stats_data['orders_count']}\n"
+        f"✉️ پیام‌های دریافتی مدیریت: {stats_data['messages_count']}"
+    )
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    
+    if data == "back_to_menu":
+        welcome_text = "🎬 به منوی اصلی موسسه هنری بهادر فیلم خوش آمدید.\nلطفاً بخش مورد نظر را انتخاب کنید:"
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        await context.bot.send_photo(
+            chat_id=query.message.chat_id,
+            photo=get_rotational_photo(),
+            caption=welcome_text,
+            reply_markup=get_main_menu(),
+            parse_mode="Markdown"
+        )
+    elif data == "portfolio":
+        keyboard = [
+            [InlineKeyboardButton("📺 سریال‌ها و فیلم‌های داستانی", callback_data="port_series")],
+            [InlineKeyboardButton("🎥 مستندهای تلویزیونی و بین‌المللی", callback_data="port_docs")],
+            [InlineKeyboardButton("⛽ پروژه ملی و کتاب مرجع گاز", callback_data="port_gas")],
+            [InlineKeyboardButton("🎨 انیمیشن‌های آموزشی و طنز", callback_data="port_anim")],
+            [InlineKeyboardButton("🏆 جوایز و لوح‌های سپاس", callback_data="port_awards")],
+            [InlineKeyboardButton("🌐 وب‌سایت رسمی", url="https://alibahador.ir"), InlineKeyboardButton("📸 اینستاگرام", url="https://instagram.com")],
+            [InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_menu")]
+        ]
+        text = "📁 **بخش نمونه‌کارها و رزومه تصویری علی بهادر**\n\nلطفاً حوزه مورد نظر خود را برای مشاهده آثار همراه با پوستر و تصویر انتخاب کنید:"
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    elif data == "port_series":
+        keyboard = [
+            [InlineKeyboardButton("(۱۳۷۲) بهترین تابستان من", callback_data="work_tabestan")],
+            [InlineKeyboardButton("(۱۳۸۰-۱۳۷۹) عشق سال‌های جنگ", callback_data="work_eshgh")],
+            [InlineKeyboardButton("(۱۳۸۸) شب هزار و یکم", callback_data="work_shab")],
+            [InlineKeyboardButton("(۱۳۹۱) قدم زدن در بهشت", callback_data="work_ghadam")],
+            [InlineKeyboardButton("(۱۳۹۳) ارثیه پرماجرا", callback_data="work_ershieh")],
+            [InlineKeyboardButton("(۱۳۹۳) شاهزاده و گدا", callback_data="work_shahzadeh")],
+            [InlineKeyboardButton("(۱۴۰۱) مشتری‌مداری", callback_data="work_moshtari")],
+            [InlineKeyboardButton("(۱۳۹۷) برکت", callback_data="work_barakat")],
+            [InlineKeyboardButton("🔙 بازگشت به نمونه کارها", callback_data="portfolio")]
+        ]
+        text = "📺 **سریال‌های تلویزیونی و فیلم‌های داستانی:**\nلطفاً اثر مورد نظر خود را برای مشاهده پوستر و جزئیات انتخاب کنید:"
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    elif data == "port_docs":
+        keyboard = [
+            [InlineKeyboardButton("مستند «زندگی»", callback_data="work_zendegi")],
+            [InlineKeyboardButton("(۲۰۱۵) مستند کنگره جهانی گاز پاریس", callback_data="work_paris")],
+            [InlineKeyboardButton("🔙 بازگشت به نمونه کارها", callback_data="portfolio")]
+        ]
+        text = "🎥 **مستندهای تلویزیونی و بین‌المللی:**\nلطفاً مستند مورد نظر خود را انتخاب کنید:"
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    elif data == "port_gas":
+        keyboard = [
+            [InlineKeyboardButton("کتاب مرجع گاز؛ انرژی پاک با نیم قرن تلاش", callback_data="work_gas_book")],
+            [InlineKeyboardButton("🔙 بازگشت به نمونه کارها", callback_data="portfolio")]
+        ]
+        text = "⛽ **پروژه‌های ملی نفت و گاز و کتاب مرجع:**\nلطفاً گزینه مورد نظر را انتخاب کنید:"
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    elif data == "port_anim":
+        keyboard = [
+            [InlineKeyboardButton("انیمیشن آموزشی «اسرافی و انصافی»", callback_data="work_esrafi")],
+            [InlineKeyboardButton("🔙 بازگشت به نمونه کارها", callback_data="portfolio")]
+        ]
+        text = "🎨 **انیمیشن‌های آموزشی و طنز:**\nلطفاً گزینه مورد نظر را انتخاب کنید:"
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    elif data == "port_awards":
+        keyboard = [
+            [InlineKeyboardButton("لوح تقدیر جشنواره رشد و دفاع مقدس", callback_data="award_roshd")],
+            [InlineKeyboardButton("لوح‌ها و تندیس‌های تقدیر ویژه", callback_data="award_tandis")],
+            [InlineKeyboardButton("🔙 بازگشت به نمونه کارها", callback_data="portfolio")]
+        ]
+        text = "🏆 **افتخارات، جوایز و لوح‌های سپاس:**\nلطفاً گزینه مورد نظر را انتخاب کنید:"
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    elif data == "work_tabestan":
+        kb = [[InlineKeyboardButton("🔙 بازگشت به سریال‌ها", callback_data="port_series")]]
+        caption = "⭐ **بهترین تابستان من**\n\nکارگردانی سریال طنز دفاع مقدس؛ پرمخاطب‌ترین مجموعه تلویزیونی زمان پخش."
+        await context.bot.send_photo(chat_id=query.message.chat_id, photo=PHOTO_IDS["work_1"], caption=caption, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+    elif data == "work_eshgh":
+        kb = [[InlineKeyboardButton("🔙 بازگشت به سریال‌ها", callback_data="port_series")]]
+        caption = "❤️ **عشق سال‌های جنگ**\n\nکارگردانی و تهیه‌کنندگی سریال با موضوع دفاع مقدس و درام اجتماعی."
+        await context.bot.send_photo(chat_id=query.message.chat_id, photo=PHOTO_IDS["work_3"], caption=caption, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+    elif data == "work_shab":
+        kb = [[InlineKeyboardButton("🔙 بازگشت به سریال‌ها", callback_data="port_series")]]
+        caption = "🌙 **شب هزار و یکم**\n\nکارگردانی سریال تلویزیونی با حضور بازیگران برجسته (محصول شبکه اول سیما)."
+        await context.bot.send_photo(chat_id=query.message.chat_id, photo=PHOTO_IDS["work_13"], caption=caption, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+    elif data == "work_ghadam":
+        kb = [[InlineKeyboardButton("🔙 بازگشت به سریال‌ها", callback_data="port_series")]]
+        caption = "🌿 **قدم زدن در بهشت**\n\nکارگردانی تله‌فیلم با ساختار سینمایی و نوآورانه."
+        await context.bot.send_photo(chat_id=query.message.chat_id, photo=PHOTO_IDS["work_4"], caption=caption, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+    elif data == "work_ershieh":
+        kb = [[InlineKeyboardButton("🔙 بازگشت به سریال‌ها", callback_data="port_series")]]
+        caption = "💼 **ارثیه پرماجرا**\n\nتهیه‌کنندگی فیلم سینمایی ویدیویی پرمخاطب با حضور بازیگران سرشناس."
+        await context.bot.send_photo(chat_id=query.message.chat_id, photo=PHOTO_IDS["work_5"], caption=caption, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+    elif data == "work_shahzadeh":
+        kb = [[InlineKeyboardButton("🔙 بازگشت به سریال‌ها", callback_data="port_series")]]
+        caption = "👑 **شاهزاده و گدا (۱۳۹۳)**\n\nمحصول موسسه هنری بهادر فیلم به تهیه‌کنندگی علی بهادر."
+        await context.bot.send_photo(chat_id=query.message.chat_id, photo=PHOTO_IDS["work_6"], caption=caption, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+    elif data == "work_moshtari":
+        kb = [[InlineKeyboardButton("🔙 بازگشت به سریال‌ها", callback_data="port_series")]]
+        caption = "🤝 **مشتری‌مداری (۱۴۰۱)**\n\nسریال آموزشی ۳۰ قسمتی به تهیه‌کنندگی و کارگردانی علی بهادر."
+        await context.bot.send_photo(chat_id=query.message.chat_id, photo=PHOTO_IDS["work_8"], caption=caption, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+    elif data == "work_barakat":
+        kb = [[InlineKeyboardButton("🔙 بازگشت به سریال‌ها", callback_data="port_series")]]
+        caption = "🌾 **برکت (۱۳۹۷)**\n\nتهیه‌کنندگی و کارگردانی مینی‌سریال تولید شده در بنیاد برکت."
+        await context.bot.send_photo(chat_id=query.message.chat_id, photo=PHOTO_IDS["work_12"], caption=caption, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+    elif data == "work_gas_book":
+        kb = [[InlineKeyboardButton("🔙 بازگشت به پروژه گاز", callback_data="port_gas")]]
+        caption = "📖 **کتاب مرجع گاز؛ انرژی پاک با نیم قرن تلاش**\n\n۱۰۱۸ صفحه، تاریخ شفاهی ۵۰ ساله شرکت ملی گاز ایران."
+        await context.bot.send_photo(chat_id=query.message.chat_id, photo=PHOTO_IDS["work_11"], caption=caption, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+    elif data == "work_paris":
+        kb = [[InlineKeyboardButton("🔙 بازگشت به مستندها", callback_data="port_docs")]]
+        caption = "🌍 **مستند کنگره جهانی گاز پاریس (۲۰۱۵)**\n\nمستند تخصصی، صنعتی و بین‌المللی."
+        await context.bot.send_photo(chat_id=query.message.chat_id, photo=PHOTO_IDS["work_14"], caption=caption, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+    elif data == "work_zendegi":
+        kb = [[InlineKeyboardButton("🔙 بازگشت به مستندها", callback_data="port_docs")]]
+        caption = "🏆 **مستند «زندگی»**\n\nبرنده جوایز متعدد از جشنواره‌های معتبر ملی (جشنواره رشد و دفاع مقدس)."
+        await context.bot.send_photo(chat_id=query.message.chat_id, photo=PHOTO_IDS["work_2"], caption=caption, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+    elif data == "work_esrafi":
+        kb = [[InlineKeyboardButton("🔙 بازگشت به انیمیشن‌ها", callback_data="port_anim")]]
+        caption = "💡 **انیمیشن آموزشی «اسرافی و انصافی»**\n\nمجموعه ۳۰ قسمتی طنز با محوریت ایمنی گاز شهری و مشاوره شخصیت حکیمانه انصافی."
+        await context.bot.send_photo(chat_id=query.message.chat_id, photo=PHOTO_IDS["work_7"], caption=caption, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+    elif data == "award_roshd":
+        kb = [[InlineKeyboardButton("🔙 بازگشت به جوایز", callback_data="port_awards")]]
+        caption = "🎖 **لوح تقدیر جشنواره بین‌المللی فیلم رشد و جشنواره دفاع مقدس**"
+        await context.bot.send_photo(chat_id=query.message.chat_id, photo=PHOTO_IDS["award_15"], caption=caption, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+    elif data == "award_tandis":
+        kb = [[InlineKeyboardButton("🔙 بازگشت به جوایز", callback_data="port_awards")]]
+        caption = "🏆 **تندیس‌ها و لوح‌های سپاس و تقدیر ویژه مدیران ارشد**"
+        await context.bot.send_photo(chat_id=query.message.chat_id, photo=PHOTO_IDS["award_16"], caption=caption, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+    elif data == "interviews":
+        keyboard = [
+            [InlineKeyboardButton("مصاحبه روزنامه اطلاعات (۲۰ مرداد ۱۴۰۵)", callback_data="view_ettelaat_img")],
+            [InlineKeyboardButton("مصاحبه هفته‌نامه صدا و سیما (مرداد ۱۴۰۵)", callback_data="view_sedavasima_img")],
+            [InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_menu")]
+        ]
+        text = "📰 **بخش مصاحبه‌ها و پوشش رسانه‌ای:**\nبرای مشاهده تصاویر و جزئیات مصاحبه‌های علی بهادر روی گزینه‌های زیر کلیک کنید:"
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    elif data == "view_ettelaat_img":
+        keyboard = [[InlineKeyboardButton("🔙 بازگشت به بخش مصاحبه‌ها", callback_data="interviews")]]
+        caption_text = (
+            "📰 **مصاحبه با روزنامه اطلاعات (۲۰ مرداد ۱۴۰۵)**\n\n"
+            "عنوان: «سینمای مستند به مدیرانی جسور نیاز دارد» (گفتگو با نژلا پیکانیان)\n\n"
+            "[مشاهده آنلاین در سایت اطلاعات](https://www.ettelaat.com/news/161537/%D8%B3%DB%8C%D9%86%D9%85%D8%A7%DB%8C-%D9%85%D8%B3%D8%AA%D9%86%D8%AF-%D8%A8%D9%87-%D9%85%D8%AF%DB%8C%D8%B1%D8%A7%D9%86%DB%8C-%D8%AC%D8%B3%D9%88%D8%B1-%D9%86%DB%8C%D8%A7%D8%B2-%D8%AF%D8%A7%D8%B1%D8%AF)"
+        )
+        try:
+            await query.message.reply_photo(
+                photo="https://www.ettelaat.com/files/fa/news/1405/5/20/161537_485.jpg",
+                caption=caption_text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode="Markdown"
+            )
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+        except Exception:
+            await query.message.reply_text(caption_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    elif data == "view_sedavasima_img":
+        keyboard = [[InlineKeyboardButton("🔙 بازگشت به بخش مصاحبه‌ها", callback_data="interviews")]]
+        caption_text = (
+            "📰 **مصاحبه با هفته‌نامه صدا و سیما (مرداد ۱۴۰۵)**\n\n"
+            "عنوان: «تصویر مقاومت در آیینه رسانه؛ نیم قرن تلاش برای هنر و وطن» (گفتگو با عبدالرحمن شلیبیان)"
+        )
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        await query.message.reply_text(caption_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    elif data == "about":
+        keyboard = [[InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_menu")]]
+        about_text = (
+            "ℹ️ **درباره علی بهادر و مؤسسه هنری بهادر فیلم**\n\n"
+            "• **تحصیلات:** کارشناسی ارشد ادبیات نمایشی و لیسانس کارگردانی از دانشکده صداوسیما\n"
+            "• **سوابق اجرایی:** مدیر گروه حماسه و دفاع شبکه یک سیما، مدیر واحد دوبلاژ شبکه یک، شروع فعالیت حرفه‌ای از سال ۱۳۶۰ در واحد خبر همدان، بیش از ۱۸ ماه حضور در پوشش رسانه‌ای دوران دفاع مقدس (صداوسیما)\n"
+            "• **مدیرعامل:** مؤسسه فرهنگی و هنری بهادر فیلم\n\n"
+            "📋 **رزومه تفکیک‌شده و سوابق هنری:**\n\n"
+            "🎬 **بخش آثار نمایشی و سریال‌ها:**\n"
+            "• کارگردانی سریال «بهترین تابستان من» (۱۳۷۵ - شبکه ۱)\n"
+            "• کارگردانی سریال «عشق سال‌های جنگ» (۱۳۸۰ - شبکه ۳)\n"
+            "• کارگردانی سریال «شب هزار و یکم» (۱۳۸۷-۱۳۸۸ - شبکه ۱)\n"
+            "• کارگردانی فیلم‌های تلویزیونی (تله‌فیلم): «قدم زدن در بهشت»، «ارثیه پرماجرا»، «شاهزاده و گدا»\n"
+            "• کارگردانی مجموعه‌ها و مینی‌سریال‌ها: «برکت»، «مشتری‌‌مداری»\n\n"
+            "🎥 **بخش مستندها و پروژه‌های ملی:**\n"
+            "• کارگردانی مستند «زندگی» (۱۳۷۰ - برنده جوایز جشنواره‌های دفاع مقدس، رشد و همدان)\n"
+            "• تولید و کارگردانی مستندهای برون‌مرزی «نوروز در ازبکستان» (برنده ۲ جایزه از جشنواره‌های برون‌مرزی IRIB) و «بدخشان بام جهان» (تاجیکستان)\n"
+            "• تألیف و تدوین کتاب مرجع و ۱۰۱۸ صفحه‌ای «گاز؛ انرژی پاک با نیم قرن تلاش» همراه با تولید مجموعه مستند ۶۳ قسمتی (۱۳۹۵)\n\n"
+            "هدف ما به تصویر کشیدن فرهنگ، هنر و تاریخ پربار ایران عزیز است."
+        )
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        await query.message.reply_text(about_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    elif data == "digital_card":
+        keyboard = [
+            [InlineKeyboardButton("🌐 وب‌‌‌‌سایت رسمی", url="https://alibahador.ir")],
+            [InlineKeyboardButton("📸 اینستاگرام موسسه", url="https://instagram.com")],
+            [InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_menu")]
+        ]
+        card_text = (
+            "💳 **کارت ویزیت دیجیتال مؤسسه هنری بهادر فیلم**\n\n"
+            "👤 **مدیرعامل:** علی بهادر\n"
+            "🎯 **تخصص:** کارگردانی، تهیه‌کنندگی و نویسندگی\n"
+            "🌐 **وب‌سایت:** alibahador.ir"
+        )
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        await query.message.reply_text(card_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    elif data == "services":
+        keyboard = [[InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_menu")]]
+        services_text = (
+            "📋 **خدمات و تعرفه‌ها:**\n\n"
+            "۱. ساخت سریال‌های داستانی و تلویزیونی\n"
+            "۲. تولید مستندهای فاخر صنعتی و تاریخی\n"
+            "۳. ساخت تیزرهای تبلیغاتی و آگهی‌های بازرگانی\n"
+            "۴. تولید انیمیشن‌های آموزشی و طنز"
+        )
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        await query.message.reply_text(services_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    elif data == "faq":
+        keyboard = [[InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_menu")]]
+        faq_text = (
+            "❓ **پرسش‌های متداول (FAQ):**\n\n"
+            "• **چگونه پروژه ثبت کنیم؟** از طریق دکمه «ثبت سفارش و درخواست مشاوره» در منوی اصلی.\n"
+            "• **چگونه با مدیریت ارتباط بگیریم؟** از طریق دکمه «ارسال پیام به مدیریت»."
+        )
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        await query.message.reply_text(faq_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+
+async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    keyboard = [
+        [InlineKeyboardButton("سریال و فیلم داستانی", callback_data="p_series")],
+        [InlineKeyboardButton("ساخت مستند", callback_data="p_documentary")],
+        [InlineKeyboardButton("تیزر تبلیغاتی", callback_data="p_teaser")],
+        [InlineKeyboardButton("انیمیشن", callback_data="p_anim")],
+        [InlineKeyboardButton("انصراف", callback_data="back_to_menu")]
+    ]
+    text = "🛒 **ثبت سفارش جدید - مرحله ۱ از ۳**\n\nلطفاً نوع پروژه مورد نظر خود را انتخاب کنید:"
+    try:
+        await query.message.delete()
+    except Exception:
+        pass
+    await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    return PROJECT_TYPE
+
+async def receive_project_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    mapping = {
+        "p_series": "سریال یا فیلم داستانی",
+        "p_documentary": "مستند",
+        "p_teaser": "تیزر تبلیغاتی",
+        "p_anim": "انیمیشن"
+    }
+    if query.data == "back_to_menu":
+        await start(update, context)
+        return ConversationHandler.END
+        
+    context.user_data['project_type'] = mapping.get(query.data, "نامشخص")
+    text = "🛒 **ثبت سفارش جدید - مرحله ۲ از ۳**\n\nلطفاً **نام و نام خانوادگی خود را ارسال کنید:**"
+    try:
+        await query.message.delete()
+    except Exception:
+        pass
+    await query.message.reply_text(text, parse_mode="Markdown")
+    return USER_NAME
+
+async def receive_user_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['user_name'] = update.message.text
+    text = "🛒 **ثبت سفارش جدید - مرحله ۳ از ۳**\n\nلطفاً **شماره تماس خود را ارسال کنید** تا همکاران ما با شما تماس بگیرند:"
+    await update.message.reply_text(text, parse_mode="Markdown")
+    return USER_PHONE
+
+async def receive_user_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['user_phone'] = update.message.text
+    stats_data["orders_count"] += 1
+    
+    p_type = context.user_data.get('project_type')
+    u_name = context.user_data.get('user_name')
+    u_phone = context.user_data.get('user_phone')
+    user = update.effective_user
+    
+    summary = (
+        "✅ **سفارش شما با موفقیت ثبت شد**\n\n"
+        f"🔹 نوع پروژه: {p_type}\n"
+        f"👤 نام: {u_name}\n"
+        f"📞 شماره تماس: {u_phone}\n\n"
+        "کارشناسان مؤسسه هنری بهادر فیلم به زودی با شما تماس خواهند گرفت."
+    )
+    
+    admin_order_notification = (
+        "🚨 **سفارش جدید ثبت شد!**\n\n"
+        f"🔹 نوع پروژه: {p_type}\n"
+        f"👤 نام کاربر: {u_name}\n"
+        f"📞 شماره تماس: {u_phone}\n"
+        f"🌐 آیدی تلگرام: @{user.username if user.username else 'ندارد'} (ID: {user.id})"
     )
     
     try:
-        bot.send_photo(chat_id, random_artwork["photo"], caption=welcome_text, reply_markup=main_menu_keyboard(), parse_mode="Markdown")
+        await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_order_notification, parse_mode="Markdown")
+    except Exception as e:
+        logger.error(f"Failed to send order notification to admin: {e}")
+        
+    keyboard = [[InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_menu")]]
+    await update.message.reply_text(summary, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    return ConversationHandler.END
+
+async def contact_admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    keyboard = [[InlineKeyboardButton("انصراف", callback_data="back_to_menu")]]
+    text = "✉️ **ارسال پیام به مدیریت**\n\nلطفاً پیام، نظر یا درخواست خود را بنویسید تا برای مدیریت ارسال شود:"
+    try:
+        await query.message.delete()
     except Exception:
-        bot.send_message(chat_id, welcome_text, reply_markup=main_menu_keyboard(), parse_mode="Markdown")
+        pass
+    await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    return ADMIN_MESSAGE
 
-# === مدیریت کلیک دکمه‌ها ===
-@bot.message_handler(func=lambda message: True)
-def handle_menu_clicks(message):
-    text = message.text
-    chat_id = message.chat.id
+async def receive_admin_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    stats_data["messages_count"] += 1
+    user_msg = update.message.text
+    user = update.effective_user
     
-    if "ثبت سفارش" in text:
-        msg = bot.send_message(chat_id, "📝 لطفاً موضوع پروژه، توضیحات و **شماره تماس** خود را ارسال کنید تا همکاران ما در اسرع وقت (ساعات پاسخگویی: ۹ الی ۲۰) با شما تماس بگیرند.\n\n*(با ثبت سفارش، یک تیزر ۱ دقیقه‌ای رایگان هدیه خواهید گرفت)*")
-        bot.register_next_step_handler(msg, save_order_step)
-        
-    elif "ارسال پیام به مدیریت" in text:
-        msg = bot.send_message(chat_id, "💬 پیام خود را مستقیماً برای مدیریت (استاد علی بهادر) ارسال کنید تا به دست ایشان برسد:")
-        bot.register_next_step_handler(msg, forward_to_admin_step)
-        
-    elif "پکیج‌های خدمات" in text:
-        bot.send_message(chat_id, CONTENT["services"], parse_mode="Markdown")
-    elif "هدیه رایگان" in text:
-        bot.send_message(chat_id, CONTENT["gift"], parse_mode="Markdown")
-    elif "فرآیند کار ما" in text:
-        bot.send_message(chat_id, CONTENT["process"], parse_mode="Markdown")
-    elif "نمونه کارها" in text:
-        bot.send_message(chat_id, CONTENT["portfolio"], parse_mode="Markdown")
-    elif "کارت ویزیت دیجیتال" in text:
-        bot.send_message(chat_id, CONTENT["digital_card"], parse_mode="Markdown")
-    elif "درباره مدیرعامل" in text:
-        bot.send_message(chat_id, CONTENT["about_ceo"], parse_mode="Markdown")
-    elif "مصاحبه‌ها و رسانه" in text:
-        bot.send_message(chat_id, CONTENT["media"], parse_mode="Markdown")
-    elif "پرسش‌های متداول" in text:
-        bot.send_message(chat_id, CONTENT["faq"], parse_mode="Markdown")
-    elif "خبرنامه آموزشی" in text:
-        bot.send_message(chat_id, CONTENT["newsletter"], parse_mode="Markdown")
-    else:
-        bot.send_message(chat_id, "لطفاً از دکمه‌های منوی زیر استفاده کنید:", reply_markup=main_menu_keyboard())
-
-# === ثبت سفارش و شماره تماس ===
-def save_order_step(message):
-    chat_id = message.chat.id
-    order_text = message.text
-    bot_stats["orders"].append({"chat_id": chat_id, "text": order_text})
-    
-    bot.send_message(
-        chat_id, 
-        "✅ درخواست سفارش و شماره تماس شما با موفقیت ثبت شد.\n"
-        "🎁 **تبریک!** مشمول دریافت **تیزر یا کلیپ ۱ دقیقه‌ای رایگان** شدید.\n"
-        "کارشناسان ما در ساعات اداری (۹ صبح تا ۲۰) در اسرع وقت با شما تماس خواهند گرفت.",
-        reply_markup=main_menu_keyboard()
+    forward_text = (
+        "✉️ **پیام جدید از مخاطب ربات:**\n\n"
+        f"👤 فرستنده: {user.full_name}\n"
+        f"🔗 نام کاربری: @{user.username if user.username else 'ندارد'} (ID: {user.id})\n\n"
+        f"💬 متن پیام:\n{user_msg}"
     )
-
-# === ارسال پیام به مدیریت ===
-def forward_to_admin_step(message):
-    chat_id = message.chat.id
-    bot.send_message(
-        chat_id,
-        "✅ پیام شما با موفقیت برای مدیریت (استاد علی بهادر) ارسال شد. از حسن توجه شما سپاسگزاریم.",
-        reply_markup=main_menu_keyboard()
-    )
-
-if __name__ == '__main__':
-    # تنظیم وب‌هوک روی سرور رندر به صورت خودکار
-    RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL")
-    if RENDER_URL:
-        bot.remove_webhook()
-        bot.set_webhook(url=f"{RENDER_URL}/{TOKEN}")
-        print(f"Webhook set to: {RENDER_URL}/{TOKEN}")
     
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    try:
+        await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=forward_text, parse_mode="Markdown")
+    except Exception as e:
+        logger.error(f"Failed to forward message to admin: {e}")
+        
+    keyboard = [[InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_menu")]]
+    await update.message.reply_text("✅ پیام شما با موفقیت به مدیریت مؤسسه هنری بهادر فیلم ارسال شد.", reply_markup=InlineKeyboardMarkup(keyboard))
+    return ConversationHandler.END
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("عملیات لغو شد.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("بازگشت به منو", callback_data="back_to_menu")]]))
+    return ConversationHandler.END
+
+def main():
+    application = ApplicationBuilder().token(TOKEN).build()
+    
+    order_conv_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(start_order, pattern="^start_order$")],
+        states={
+            PROJECT_TYPE: [CallbackQueryHandler(receive_project_type)],
+            USER_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_user_name)],
+            USER_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_user_phone)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    
+    contact_conv_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(contact_admin_start, pattern="^contact_admin$")],
+        states={
+            ADMIN_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_admin_message)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("stats", stats_command))
+    application.add_handler(order_conv_handler)
+    application.add_handler(contact_conv_handler)
+    application.add_handler(CallbackQueryHandler(button_handler))
+    
+    logger.info("Bahador Film Bot is starting and polling for updates...")
+    application.run_polling(drop_pending_updates=True)
+
+if __name__ == "__main__":
+    main()
