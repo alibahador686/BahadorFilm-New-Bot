@@ -111,20 +111,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     header_photo = get_rotational_photo()
     
-    if update.callback_query:
+  if update.callback_query:
         query = update.callback_query
         await query.answer()
         try:
             await query.message.delete()
         except Exception:
             pass
-    await context.bot.send_message(
-        chat_id=query.message.chat_id,
-        text=welcome_text,
-        reply_markup=get_main_menu(),
-        parse_mode="MarkDown"
-    )
-  elif update.message:
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=welcome_text,
+            reply_markup=get_main_menu(),
+            parse_mode="MarkDown"
+        )
+    elif update.message:
         await update.message.reply_text(
             text=welcome_text,
             reply_markup=get_main_menu(),
