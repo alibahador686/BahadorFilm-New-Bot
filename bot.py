@@ -613,5 +613,12 @@ def main():
     logger.info("Bahador Film Bot is starting and polling for updates...")
     application.run_polling(drop_pending_updates=True)
 
-if __name__ == "__main__":
+import asyncio
+
+if __name__ == '__main__':
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
+    
     main()
