@@ -1,10 +1,24 @@
+import os
 import random
+import threading
+from flask import Flask
 import telebot
 from telebot import types
 
 # === توکن ربات جدید شما (@BahadorFilm_bot) ===
 TOKEN = "8584661357:AAFN7Sl0_H0bOG-M8Og9tyYIDexQKu_0N_k"
 bot = telebot.TeleBot(TOKEN)
+
+# === راه‌اندازی سرور وب Flask برای سازگاری با Render ===
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bahador Film Bot is running live and active!"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
 
 # === حافظه موقت برای آمار و سفارشات ===
 bot_stats = {
@@ -69,7 +83,7 @@ CONTENT = {
         "• **بهترین تابستان من:** (۱۳۷۲) کارگردانی سریال ۸ قسمتی طنز دفاع مقدس (پرمخاطب‌ترین مجموعه سیما در زمان پخش و بازپخش‌های متعدد)\n"
         "• **قدم زدن در بهشت:** (۱۳۹۱-۱۳۹۳) کارگردانی تله‌فیلم سینمایی-تلویزیونی با نوگرایی خاص\n"
         "• **مجموعه برکت:** (۱۳۹۷) تهیه‌کنندگی و کارگردانی مینی‌سریال ۴ قسمتی\n"
-        "• **مجموعه مشتری‌مداری:** (۱۴۰۰) تهیه‌کنندگی و کارگردانی سریال آموزشی ۳۰ قسمتی\n"
+        "• **مجموعه مشتری‌مداری:** (۱۴۰۰) تهیه‌‌کنندگی و کارگردانی سریال آموزشی ۳۰ قسمتی\n"
         "• **فیلم‌های ویدئویی سینمایی:** «ارثیه پرماجرا» و «شاهزاده و گدا» (تهیه‌کنندگی - ۱۳۹۳)\n"
         "• **فیلم‌های داستانی کوتاه:** «آن شب» و «گردنبند» (موضوع دفاع مقدس)\n\n"
         "🌍 **ج) بخش مستند، پژوهشی و مجموعه‌های تلویزیونی کلان:**\n"
@@ -226,5 +240,10 @@ def forward_to_admin_step(message):
     )
 
 if __name__ == '__main__':
-    print("Bahador Film Secure Bot is running successfully...")
+    # اجرای Flask در یک ترد (Thread) جداگانه برای جلوگیری از مسدود شدن ربات
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.daemon = True
+    flask_thread.start()
+    
+    print("Bahador Film Secure Bot with Flask is running successfully...")
     bot.infinity_polling()
