@@ -118,19 +118,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.delete()
         except Exception:
             pass
-        await context.bot.send_photo(
-            chat_id=query.message.chat_id,
-            photo=header_photo,
-            caption=welcome_text,
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=welcome_text,
+        reply_markup=get_main_menu(),
+        parse_mode="MarkDown"
+    )
+  elif update.message:
+        await update.message.reply_text(
+            text=welcome_text,
             reply_markup=get_main_menu(),
-            parse_mode="Markdown"
-        )
-    elif update.message:
-        await update.message.reply_photo(
-            photo=header_photo,
-            caption=welcome_text,
-            reply_markup=get_main_menu(),
-            parse_mode="Markdown"
+            parse_mode="MarkDown"
         )
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
