@@ -74,7 +74,7 @@ CONTENT = {
         "1️⃣ **تولیدات نمایشی و تلویزیونی:** ساخت سریال‌های داستانی، تله‌فیلم، فیلم‌های سینمایی و ویدئویی بلند و کوتاه.\n"
         "2️⃣ **مستندسازی کلان و تخصصی:** تولید مستندهای صنعتی، تاریخی، پژوهشی و مجموعه‌های تلویزیونی کلان (همکاری‌های گسترده ملی با صنعت نفت و گاز کشور).\n"
         "3️⃣ **تولیدات بین‌المللی:** ساخت مستندهای برون‌مرزی در کشورهای تاجیکستان، ازبکستان، ترکمنستان، قزاقستان و...\n"
-        "4️⃣ **انیمیشن و موشن‌‌گرافیک:** تولید مجموعه‌های انیمیشن طنز و آموزشی موزیکال (مانند «اسرافی و انصافی»).\n"
+        "4️⃣ **انیمیشن و موشن‌گرافیک:** تولید مجموعه‌های انیمیشن طنز و آموزشی موزیکال (مانند «اسرافی و انصافی»).\n"
         "5️⃣ **آموزش و مشاوره تخصصی:** مشاوره‌های حرفه‌ای در حوزه کارگردانی، نگارش فیلمنامه، تدوین پیشرفته و تدوین کتب مرجع ملی."
     ),
     "portfolio": (
@@ -134,27 +134,27 @@ CONTENT = {
     )
 }
 
-# === منوی اصلی ۱۱ تایی کلیدها ===
+# === منوی اصلی ۱۱ تایی شکیل و مرتب ===
 def main_menu_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    btn1 = types.KeyboardButton("💬 ثبت سفارش و درخواست مشاوره")
-    btn2 = types.KeyboardButton("📦 پکیج‌های خدمات")
-    btn3 = types.KeyboardButton("🎁 هدیه رایگان (فایل راهنما)")
-    btn4 = types.KeyboardButton("⚙️ فرآیند کار ما")
-    btn5 = types.KeyboardButton("🎬 نمونه کارها و رزومه کامل")
-    btn6 = types.KeyboardButton("💳 کارت ویزیت دیجیتال")
-    btn7 = types.KeyboardButton("👤 درباره مدیرعامل")
-    btn8 = types.KeyboardButton("📰 مصاحبه‌ها و رسانه")
-    btn9 = types.KeyboardButton("💬 ارسال پیام به مدیریت")
-    btn10 = types.KeyboardButton("❓ پرسش‌های متداول (FAQ)")
+    btn1 = types.KeyboardButton("🎬 نمونه کارها و رزومه کامل")
+    btn2 = types.KeyboardButton("👤 درباره مدیرعامل")
+    btn3 = types.KeyboardButton("💬 ارسال پیام به مدیریت")
+    btn4 = types.KeyboardButton("💳 کارت ویزیت دیجیتال")
+    btn5 = types.KeyboardButton("📦 پکیج‌های خدمات")
+    btn6 = types.KeyboardButton("💬 ثبت سفارش و درخواست مشاوره")
+    btn7 = types.KeyboardButton("📰 مصاحبه‌ها و رسانه")
+    btn8 = types.KeyboardButton("❓ پرسش‌های متداول (FAQ)")
+    btn9 = types.KeyboardButton("🎁 هدیه رایگان (فایل راهنما)")
+    btn10 = types.KeyboardButton("⚙️ فرآیند کار ما")
     btn11 = types.KeyboardButton("🔔 خبرنامه آموزشی")
     
-    markup.add(btn1)
-    markup.add(btn2, btn3)
-    markup.add(btn4, btn5)
-    markup.add(btn6, btn7)
-    markup.add(btn8, btn9)
-    markup.add(btn10, btn11)
+    markup.add(btn1, btn2)
+    markup.add(btn3, btn4)
+    markup.add(btn5, btn6)
+    markup.add(btn7, btn8)
+    markup.add(btn9, btn10)
+    markup.add(btn11)
     return markup
 
 # === استارت ربات و نمایش عکس رندوم آثار ===
