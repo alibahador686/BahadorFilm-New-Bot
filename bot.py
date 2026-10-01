@@ -3,6 +3,8 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 import random
 from datetime import datetime
+import logging
+import asyncio
 
 # ایجاد یک سرور بسیار ساده HTTP برای پاسخ به نیاز رندر و UptimeRobot
 class HealthCheckHandler(BaseHTTPRequestHandler):
@@ -21,8 +23,6 @@ def run_http_server():
 
 threading.Thread(target=run_http_server, daemon=True).start()
 
-import os
-import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
@@ -40,7 +40,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# توکن ربات خوانده شده از متغیرهای محیطی رندر (یا جایگذاری مستقیم توکن جدید)
+# توکن ربات خوانده شده از متغیرهای محیطی رندر
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8584661357:AAFN7Sl0_H0bOG-M8Og9tyYIDexQKu_0N_k")
 ADMIN_CHAT_ID = int(os.environ.get("ADMIN_CHAT_ID", "198728977"))
 
@@ -104,12 +104,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     welcome_text = (
         f"سلام {user.first_name} عزیز! 🎬\n\n"
-        f"به ربات رسمی موسسه هنری بهادر فیلم خوش‌آمدید**\n\n"
+        f"به ربات رسمی موسسه هنری بهادر فیلم خوش‌آمدید\n\n"
         f"**به مدیریت علی بهادر** - کارگردان، تهیه‌کننده و نویسنده (دارای کارشناسی ارشد ادبیات نمایشی و لیسانس کارگردانی از دانشکده صداوسیما با بیش از چهار دهه تجربه حرفه‌ای در ساخت سریال، مستندهای فاخر تلویزیونی، تیزر، آگهی و انیمیشن)\n\n"
         "لطفاً بخش مورد نظر خود را از منوی زیر انتخاب کنید"
     )
-
-    header_photo = get_rotational_photo()
 
     if update.callback_query:
         query = update.callback_query
@@ -130,6 +128,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=get_main_menu(),
             parse_mode="MarkDown"
         )
+
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_CHAT_ID:
         return
     text = (
@@ -198,7 +198,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("(۲۰۱۵) مستند کنگره جهانی گاز پاریس", callback_data="work_paris")],
             [InlineKeyboardButton("🔙 بازگشت به نمونه کارها", callback_data="portfolio")]
         ]
-        text = "🎥 **مستندهای تلویزیونی و بین‌المللی:**\nلطفاً مستند مورد نظر خود را انتخاب کنید:"
+        text = "🎥 **مستندهای تلویزیونی و بین‌‌المللی:**\nلطفاً مستند مورد نظر خود را انتخاب کنید:"
         try:
             await query.message.delete()
         except Exception:
@@ -406,7 +406,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• کارگردانی سریال «عشق سال‌های جنگ» (۱۳۸۰ - شبکه ۳)\n"
             "• کارگردانی سریال «شب هزار و یکم» (۱۳۸۷-۱۳۸۸ - شبکه ۱)\n"
             "• کارگردانی فیلم‌های تلویزیونی (تله‌فیلم): «قدم زدن در بهشت»، «ارثیه پرماجرا»، «شاهزاده و گدا»\n"
-            "• کارگردانی مجموعه‌ها و مینی‌سریال‌ها: «برکت»، «مشتری‌مداری»\n\n"
+            "• کارگردانی مجموعه‌ها و مینی‌سریال‌ها: «برکت»، «مشتری‌‌مداری»\n\n"
             "🎥 **بخش مستندها و پروژه‌های ملی:**\n"
             "• کارگردانی مستند «زندگی» (۱۳۷۰ - برنده جوایز جشنواره‌های دفاع مقدس، رشد و همدان)\n"
             "• تولید و کارگردانی مستندهای برون‌مرزی «نوروز در ازبکستان» (برنده ۲ جایزه از جشنواره‌های برون‌مرزی IRIB) و «بدخشان بام جهان» (تاجیکستان)\n"
@@ -572,7 +572,7 @@ async def receive_admin_message(update: Update, context: ContextTypes.DEFAULT_TY
         logger.error(f"Failed to forward message to admin: {e}")
         
     keyboard = [[InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_menu")]]
-    await update.message.reply_text("✅ پیام شما با موفقیت به مدیریت موسسه هنری بهادر فیلم ارسال شد.", reply_markup=keyboard)
+    await update.message.reply_text("✅ پیام شما با موفقیت به مدیریت موسسه هنری بهادر فیلم ارسال شد.", reply_markup=InlineKeyboardMarkup(keyboard))
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -585,11 +585,11 @@ def main():
     order_conv_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(start_order, pattern="^start_order$")],
         states={
-            PROJECT_TYPE: [CallbackQueryHandler(receive_project_type)],
+            PROJECT_TYPE: [CallbackQueryHandler(receive_project_type, pattern="^p_")],
             USER_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_user_name)],
             USER_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_user_phone)],
         },
-        fallbacks=[CommandHandler("cancel", cancel)],
+        fallbacks=[CommandHandler("cancel", cancel), CallbackQueryHandler(start, pattern="^back_to_menu$")],
     )
     
     contact_conv_handler = ConversationHandler(
@@ -597,7 +597,7 @@ def main():
         states={
             ADMIN_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_admin_message)],
         },
-        fallbacks=[CommandHandler("cancel", cancel)],
+        fallbacks=[CommandHandler("cancel", cancel), CallbackQueryHandler(start, pattern="^back_to_menu$")],
     )
     
     application.add_handler(CommandHandler("start", start))
@@ -608,8 +608,6 @@ def main():
     
     logger.info("Bahador Film Bot is starting and polling for updates...")
     application.run_polling(drop_pending_updates=True)
-
-import asyncio
 
 if __name__ == '__main__':
     try:
