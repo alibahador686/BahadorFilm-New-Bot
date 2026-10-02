@@ -41,7 +41,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # توکن ربات خوانده شده از متغیرهای محیطی رندر
-TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8584661357:AAFN7Sl0_H0bOG-M8Og9tyYIDexQKu_0N_k")
+TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8584661357:AAHfHd78FGHDInBD0fmtF3X6jcTe1gojDuE")
 ADMIN_CHAT_ID = int(os.environ.get("ADMIN_CHAT_ID", "198728977"))
 
 PHOTO_IDS = {
