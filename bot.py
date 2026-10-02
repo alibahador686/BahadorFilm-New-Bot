@@ -22,13 +22,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# سرور HTTP بسیار ساده جهت پاسخ به نیاز پلتفرم Render و UptimeRobot (روی پورت 10000)
+# سرور HTTP جهانی پاسخگو به تمام مسیرها جهت رفع مشکل مانیتورینگ UptimeRobot و Render
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
+        self.send_header("Content-type", "text/plain; charset=utf-8")
         self.end_headers()
-        self.wfile.write(b"OK")
+        self.wfile.write(b"OK - Bahador Film Bot is running smoothly.")
         
+    def do_HEAD(self):
+        self.send_response(200)
+        self.end_headers()
+
     def log_message(self, format, *args):
         pass
 
@@ -37,10 +42,10 @@ def run_http_server():
     server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
     server.serve_forever()
 
-# اجرای سرور در یک ترد جداگانه به صورت دیمون
+# اجرای سرور در یک ترد جداگانه
 threading.Thread(target=run_http_server, daemon=True).start()
 
-# توکن و شناسه ادمین از متغیرهای محیطی رندر
+# توکن و شناسه ادمین از متغیرهای محیطی
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8584661357:AAHfHd78FGHDInBD0fmtF3X6jcTe1gojDuE")
 ADMIN_CHAT_ID = int(os.environ.get("ADMIN_CHAT_ID", "198728977"))
 
@@ -77,7 +82,6 @@ stats_data = {
     "messages_count": 0
 }
 
-# مراحل مکالمه ConversationHandler برای ثبت سفارش و ارسال پیام به مدیریت
 PROJECT_TYPE, USER_NAME, USER_PHONE = range(3)
 ADMIN_MESSAGE = range(1)
 
@@ -87,7 +91,7 @@ def get_rotational_photo():
     selected_key = all_keys[day_of_year % len(all_keys)]
     return PHOTO_IDS.get(selected_key, PHOTO_IDS["logo"])
 
-# منوی اصلی کامل ۱۱ گزینه‌ای (شامل تمامی دکمه‌های درخواستی)
+# منوی اصلی کامل ۱۱ گزینه‌ای
 def get_main_menu():
     keyboard = [
         [InlineKeyboardButton("🛒 ثبت سفارش و درخواست مشاوره", callback_data="start_order")],
@@ -190,7 +194,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("(۱۳۹۷) برکت", callback_data="work_barakat")],
             [InlineKeyboardButton("🔙 بازگشت به نمونه کارها", callback_data="portfolio")]
         ]
-        text = "📺 **سریال‌های تلویزیونی و فیلم‌های داستانی:**\nلطفاً اثر مورد نظر خود را برای مشاهده پوستر و جزئیات انتخاب کنید:"
+        text = "📺 **سریال‌های تلویزیونی و فیلم‌های داستانی:**\nلطفاً اثر مورد نظر خود را برای مشاهده جزئیات کامل و پوستر انتخاب کنید:"
         try:
             await query.message.delete()
         except Exception:
@@ -199,11 +203,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     elif data == "port_docs":
         keyboard = [
-            [InlineKeyboardButton("مستند «زندگی»", callback_data="work_zendegi")],
+            [InlineKeyboardButton("مستند «زندگی» (۱۳۷۰)", callback_data="work_zendegi")],
+            [InlineKeyboardButton("مستند «نوروز در ازبکستان»", callback_data="work_uzbek")],
+            [InlineKeyboardButton("مستند «بدخشان بام جهان» (تاجیکستان)", callback_data="work_badakhshan")],
             [InlineKeyboardButton("(۲۰۱۵) مستند کنگره جهانی گاز پاریس", callback_data="work_paris")],
+            [InlineKeyboardButton("مستندهای نگهداری تأسیسات گاز", callback_data="work_gas_maint")],
+            [InlineKeyboardButton("مستند شرکتی کنسار خزر", callback_data="work_konsar")],
             [InlineKeyboardButton("🔙 بازگشت به نمونه کارها", callback_data="portfolio")]
         ]
-        text = "🎥 **مستندهای تلویزیونی و بین‌المللی:**"
+        text = "🎥 **مستندهای تلویزیونی و بین‌المللی (بیش از ۶۰ عنوان فاخر):**\nلطفاً عنوان مستند را انتخاب کنید:"
         try:
             await query.message.delete()
         except Exception:
@@ -213,6 +221,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "port_gas":
         keyboard = [
             [InlineKeyboardButton("کتاب مرجع گاز؛ انرژی پاک با نیم قرن تلاش", callback_data="work_gas_book")],
+            [InlineKeyboardButton("پروژه ۵۰ قسمتی کمپین رسانه‌ای انرژی", callback_data="work_energy_campaign")],
             [InlineKeyboardButton("🔙 بازگشت به نمونه کارها", callback_data="portfolio")]
         ]
         text = "⛽ **پروژه‌های ملی نفت و گاز و کتاب مرجع:**"
@@ -225,9 +234,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "port_anim":
         keyboard = [
             [InlineKeyboardButton("انیمیشن آموزشی «اسرافی و انصافی»", callback_data="work_esrafi")],
+            [InlineKeyboardButton("فیلم‌های کوتاه «آن شب» و «گردنبند»", callback_data="work_short_films")],
             [InlineKeyboardButton("🔙 بازگشت به نمونه کارها", callback_data="portfolio")]
         ]
-        text = "🎨 **انیمیشن‌های آموزشی و طنز:**"
+        text = "🎨 **انیمیشن‌های آموزشی، طنز و فیلم‌های کوتاه:**"
         try:
             await query.message.delete()
         except Exception:
@@ -236,36 +246,153 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "port_awards":
         keyboard = [
-            [InlineKeyboardButton("لوح تقدیر جشنواره رشد و دفاع مقدس", callback_data="award_roshd")],
-            [InlineKeyboardButton("تندیس‌ها و لوح‌های تقدیر ویژه", callback_data="award_tandis")],
+            [InlineKeyboardButton("جایزه جشنواره دفاع مقدس و رشد (۱۳۷۰)", callback_data="award_roshd")],
+            [InlineKeyboardButton("جوایز جشنواره‌های برون‌مرزی صداوسیما", callback_data="award_overseas")],
+            [InlineKeyboardButton("تندیس‌ها و لوح‌های سپاس و تقدیر ویژه مدیران", callback_data="award_tandis")],
             [InlineKeyboardButton("🔙 بازگشت به نمونه کارها", callback_data="portfolio")]
         ]
-        text = "🏆 **افتخارات و جوایز:**"
+        text = "🏆 **افتخارات، جوایز و لوح‌های سپاس:**"
         try:
             await query.message.delete()
         except Exception:
             pass
         await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
-    # نمایش جزئیات و پوسترهای آثار با کلیک روی هر اثر
-    elif data in ["work_tabestan", "work_eshgh", "work_shab", "work_ghadam", "work_ershieh", "work_shahzadeh", "work_moshtari", "work_barakat", "work_gas_book", "work_paris", "work_zendegi", "work_esrafi", "award_roshd", "award_tandis"]:
-        kb = [[InlineKeyboardButton("🔙 بازگشت به فهرست آثار", callback_data="port_series")]]
+    # نمایش اطلاعات کامل و جامع آثار با پوستر مربوطه
+    elif data in [
+        "work_tabestan", "work_eshgh", "work_shab", "work_ghadam", "work_ershieh", 
+        "work_shahzadeh", "work_moshtari", "work_barakat", "work_zendegi", "work_uzbek", 
+        "work_badakhshan", "work_paris", "work_gas_maint", "work_konsar", "work_gas_book", 
+        "work_energy_campaign", "work_esrafi", "work_short_films", "award_roshd", 
+        "award_overseas", "award_tandis"
+    ]:
+        back_target = "port_docs" if data in ["work_zendegi", "work_uzbek", "work_badakhshan", "work_paris", "work_gas_maint", "work_konsar"] else \
+                      ("port_gas" if data in ["work_gas_book", "work_energy_campaign"] else \
+                      ("port_anim" if data in ["work_esrafi", "work_short_films"] else \
+                      ("port_awards" if data in ["award_roshd", "award_overseas", "award_tandis"] else "port_series")))
         
-        captions = {
-            "work_tabestan": "⭐ **بهترین تابستان من**\n\nکارگردانی سریال طنز دفاع مقدس؛ پرمخاطب‌ترین مجموعه تلویزیونی زمان پخش.",
-            "work_eshgh": "❤️ **عشق سال‌های جنگ**\n\nکارگردانی و تهیه‌کنندگی سریال با موضوع دفاع مقدس و درام اجتماعی.",
-            "work_shab": "🌙 **شب هزار و یکم**\n\nکارگردانی سریال تلویزیونی با حضور بازیگران برجسته (محصول شبکه اول سیما).",
-            "work_ghadam": "🌿 **قدم زدن در بهشت**\n\nکارگردانی تله‌فیلم با ساختار سینمایی و نوآورانه.",
-            "work_ershieh": "💼 **ارثیه پرماجرا**\n\nتهیه‌کنندگی فیلم سینمایی ویدیویی پرمخاطب.",
-            "work_shahzadeh": "👑 **شاهزاده و گدا (۱۳۹۳)**\n\nمحصول موسسه هنری بهادر فیلم به تهیه‌کنندگی علی بهادر.",
-            "work_moshtari": "🤝 **مشتری‌مداری (۱۴۰۱)**\n\nسریال آموزشی ۳۰ قسمتی به تهیه‌کنندگی و کارگردانی علی بهادر.",
-            "work_barakat": "🌾 **برکت (۱۳۹۷)**\n\nتهیه‌کنندگی و کارگردانی مینی‌سریال تولید شده در بنیاد برکت.",
-            "work_gas_book": "📖 **کتاب مرجع گاز؛ انرژی پاک با نیم قرن تلاش**\n\n۱۰۱۸ صفحه، تاریخ شفاهی ۵۰ ساله شرکت ملی گاز ایران.",
-            "work_paris": "🌍 **مستند کنگره جهانی گاز پاریس (۲۰۱۵)**\n\nمستند تخصصی، صنعتی و بین‌المللی.",
-            "work_zendegi": "🏆 **مستند «زندگی»**\n\nبرنده جوایز متعدد از جشنواره‌های معتبر ملی (رشد و دفاع مقدس).",
-            "work_esrafi": "💡 **انیمیشن آموزشی «اسرافی و انصافی»**\n\nمجموعه ۳۰ قسمتی طنز با محوریت ایمنی گاز شهری.",
-            "award_roshd": "🎖 **لوح تقدیر جشنواره بین‌المللی فیلم رشد و جشنواره دفاع مقدس**",
-            "award_tandis": "🏆 **تندیس‌ها و لوح‌های سپاس و تقدیر ویژه مدیران ارشد**"
+        kb = [[InlineKeyboardButton("🔙 بازگشت به این فهرست", callback_data=back_target)]]
+        
+        detailed_captions = {
+            "work_tabestan": (
+                "⭐ **بهترین تابستان من (۱۳۷۵)**\n\n"
+                "• **کارگردان:** علی بهادر\n"
+                "• **شبکه پخش:** شبکه ۱ سیمای جمهوری اسلامی ایران\n"
+                "• **ژانر:** طنز و دفاع مقدس\n"
+                "• **خلاصه اثر:** این مجموعه خاطره‌انگیز و پرمخاطب، روایتگر روزمرگی‌ها، شیطنت‌ها و حماسه‌آفرینی نوجوانان در جبهه‌های جنگ است که با تلفیق طنز و درام توانست عنوان یکی از محبوب‌ترین سریال‌های دهه ۷۰ تلویزیون را به خود اختصاص دهد."
+            ),
+            "work_eshgh": (
+                "❤️ **عشق سال‌های جنگ (۱۳۸۰)**\n\n"
+                "• **کارگردان و تهیه‌کننده:** علی بهادر\n"
+                "• **شبکه پخش:** شبکه ۳ سیما\n"
+                "• **بازیگر شاخص:** اندیشه فولادوند و جمعی از هنرمندان مطرح\n"
+                "• **ژانر:** درام اجتماعی و دفاع مقدس\n"
+                "• **خلاصه اثر:** درامی عمیق و تاثیرگذار بر اساس رمانی با همین نام که به زوایای انسانی، عواطف و پیوندهای عاطفی در بستر بحران جنگ تحمیلی می‌پردازد."
+            ),
+            "work_shab": (
+                "🌙 **شب هزار و یکم (۱۳۸۸–۱۳۸۷)**\n\n"
+                "• **کارگردان:** علی بهادر | **تهیه‌‌کننده:** (تولید شبکه اول سیما)\n"
+                "• **بازیگران کلیدی:** دانیال حکیمی (نقش اول)، جواد انصافی (پزشک ارمنی)، علیرضا خمسه و محمدرضا عباس‌نژاد (سکانس کمدی)، شیوا خنیاگر و میلاد کی‌مرام، به همراه شخصیت‌های فرهاد، فریال و نعمت.\n"
+                "• **تعداد قسمت:** ۱۳ قسمت\n"
+                "• **خلاصه اثر:** مجموعه‌ای پرماجرا و پرمخاطب که با ساختاری معمایی و اجتماعی روی آنتن شبکه یک رفت و با استقبال چشمگیر مخاطبان مواجه شد."
+            ),
+            "work_ghadam": (
+                "🌿 **قدم زدن در بهشت (تله‌فیلم)**\n\n"
+                "• **کارگردان و تهیه‌‌کننده:** علی بهادر\n"
+                "• **ژانر:** فیلم تلویزیونی فاخر\n"
+                "• **خلاصه اثر:** تله‌فیلمی با ساختار کاملاً سینمایی، بهره‌گیری از تکنیک‌های نوین فیلم‌برداری، استفاده از negative space و عمق میدان کم برای انتقال مفاهیم انسانی و معنوی."
+            ),
+            "work_ershieh": (
+                "💼 **ارثیه پرماجرا (فیلم ویدیویی)**\n\n"
+                "• **کارگردان و تهیه‌کننده:** علی بهادر\n"
+                "• **ژانر:** کمدی و خانوادگی\n"
+                "• **خلاصه اثر:** اثری پرکشش و سرگرم‌کننده پیرامون چالش‌ها و اتفاقات طنزآمیز پیرامون تقسیم ارث و میراث خانوادگی."
+            ),
+            "work_shahzadeh": (
+                "👑 **شاهزاده و گدا (۱۳۹۳)**\n\n"
+                "• **موسسه:** موسسه فرهنگی هنری بهادر فیلم\n"
+                "• **کارگردان و تهیه‌کننده:** علی بهادر\n"
+                "• **خلاصه اثر:** فیلم بلند تلویزیونی با رگه‌های طنز اجتماعی و نقد روابط طبقاتی با حضور بازیگران برجسته."
+            ),
+            "work_moshtari": (
+                "🤝 **مشتری‌مداری (۱۴۰۱)**\n\n"
+                "• **کارگردان و تهیه‌کننده:** علی بهادر\n"
+                "• **تعداد قسمت:** ۳۰ قسمت آموزشی\n"
+                "• **خلاصه اثر:** مجموعه آموزشی و کاربردی با هدف ارتقای فرهنگ تکریم ارباب رجوع و اصول حرفه‌ای ارتباط با مخاطب و مشتری در سازمان‌ها."
+            ),
+            "work_barakat": (
+                "🌾 **برکت (۱۳۹۷)**\n\n"
+                "• **کارگردان و تهیه‌کننده:** علی بهادر\n"
+                "• **محل تولید:** بنیاد برکت\n"
+                "• **خلاصه اثر:** مینی‌سریالی مستندگونه و داستانی با محوریت کارآفرینی، رونق تولید و محرومیت‌زدایی در مناطق روستایی کشور."
+            ),
+            "work_zendegi": (
+                "🏆 **مستند «زندگی» (۱۳۷۰)**\n\n"
+                "• **کارگردان:** علی بهادر\n"
+                "• **افتخارات:** برنده جوایز متعدد از جشنواره‌های ملی فیلم دفاع مقدس، جشنواره فیلم رشد و جشنواره فیلم کوتاه همدان\n"
+                "• **خلاصه اثر:** یکی از آثار شاخص مستند سینمای دفاع مقدس که نگاهی نو به جریان زندگی و مقاومت در سال‌های جنگ داشت."
+            ),
+            "work_uzbek": (
+                "🌍 **مستند «نوروز در ازبکستان»**\n\n"
+                "• **کارگردان و تهیه‌کننده:** علی بهادر\n"
+                "• **افتخارات:** برنده دو جایزه معتبر از جشنواره‌های برون‌مرزی سازمان صداوسیما\n"
+                "• **خلاصه اثر:** مستندی پژوهشی و تصویری پیرامون آیین‌ها، سنن کهن و پیوندهای عمیق فرهنگی جشن باستانی نوروز در شهرهای تاریخی ازبکستان."
+            ),
+            "work_badakhshan": (
+                "🏔 **مستند «بدخشان بام جهان»**\n\n"
+                "• **محل تولید:** کشور تاجیکستان\n"
+                "• **کارگردان:** علی بهادر\n"
+                "• **خلاصه اثر:** مستندی جغرافیایی، فرهنگی و مردم‌شناختی که به زیبایی طبیعت و آداب و رسوم مناطق کوهستانی و صعب‌العبور بدخشان پرداخته است."
+            ),
+            "work_paris": (
+                "🌐 **مستند کنگره جهانی گاز پاریس (۲۰۱۵)**\n\n"
+                "• **کارگردان:** علی بهادر\n"
+                "• **خلاصه اثر:** پوشش تصویری و مستندسازی تخصصی از رویداد بزرگ صنعت گاز جهان با حضور هیئت‌های بین‌المللی."
+            ),
+            "work_gas_maint": (
+                "🔧 **مستندهای نگهداری تأسیسات گاز (۱۴۰۴–۱۴۰۵)**\n\n"
+                "• **نویسنده و کارگردان:** علی بهادر\n"
+                "• **خلاصه اثر:** مجموعه‌ای ۲ قسمتی مستند صنعتی درباره استانداردهای نگهداری، ایمنی و بهینه‌سازی شبکه‌های توزیع گاز کشور."
+            ),
+            "work_konsar": (
+                "🏢 **مستند شرکتی کنسار خزر (۱۴۰۴)**\n\n"
+                "• **کارگردان:** علی بهادر\n"
+                "• **خلاصه اثر:** معرفی دستاوردها، خطوط تولید، امکانات صنعتی و رزومه شرکت کنسار خزر با استانداردهای نوین سینمایی."
+            ),
+            "work_gas_book": (
+                "📖 **کتاب مرجع «گاز؛ انرژی پاک با نیم قرن تلاش» (۱۳۹۵)**\n\n"
+                "• **نویسندگان و ویراستاران:** علی بهادر و مجید بوجارزاده\n"
+                "• **حجم اثر:** کتاب مرجع تخصصی ۱۰۱۸ صفحه‌ای\n"
+                "• **پروژه همراه:** تولید مجموعه مستند ۶۳ قسمتی تلویزیونی مرتبط با تاریخ شفاهی صنعت گاز ایران."
+            ),
+            "work_energy_campaign": (
+                "⚡ **کمپین رسانه‌ای وزارت انرژی (۵۰ قسمت)**\n\n"
+                "• **طراح و کارگردان:** علی بهادر\n"
+                "• **خلاصه اثر:** پروژه جامع رسانه‌ای شامل تولید ۵۰ برنامه تلویزیونی و دیجیتال با رویکرد فرهنگ‌سازی مصرف بهینه انرژی."
+            ),
+            "work_esrafi": (
+                "💡 **انیمیشن آموزشی «اسرافی و انصافی»**\n\n"
+                "• **کارگردان و تهیه‌کننده:** علی بهادر\n"
+                "• **ژانر:** انیمیشن طنز آموزشی\n"
+                "• **خلاصه اثر:** مجموعه انیمیشنی پرمخاطب با هدف آموزش نکات ایمنی و اصول پیشگیری از حوادث گاز شهری."
+            ),
+            "work_short_films": (
+                "🎬 **فیلم‌های کوتاه «آن شب» و «گردنبند»**\n\n"
+                "• **کارگردان:** علی بهادر\n"
+                "• **خلاصه اثر:** آثار داستانی کوتاه با ساختار روایی عمیق و تجربی در حوزه سینمای معناگرا و اجتماعی."
+            ),
+            "award_roshd": (
+                "🎖 **جوایز جشنواره بین‌المللی فیلم رشد و جشنواره دفاع مقدس**\n\n"
+                "دریافت دیپلم افتخار و لوح زرین برای کارگردانی مستند «زندگی» و آثار نمایشی دفاع مقدس در دهه‌های ۶۰ و ۷۰."
+            ),
+            "award_overseas": (
+                "🏆 **جایزه جشنواره‌های برون‌مرزی صداوسیما**\n\n"
+                "کسب دو جایزه برتر برای مجموعه مستند «نوروز در ازبکستان» در جشنواره‌های بین‌المللی سازمان صداوسیما."
+            ),
+            "award_tandis": (
+                "🌟 **تندیس‌ها و لوح‌های سپاس مدیران ارشد کشور**\n\n"
+                "دریافت ده‌ها لوح تقدیر و تندیس از وزرا، مدیران عامل شرکت ملی گاز، سازمان صداوسیما و جشنواره‌های ملی فرهنگی و هنری."
+            )
         }
         
         photo_key = data if data in PHOTO_IDS else "logo"
@@ -273,14 +400,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_photo(
                 chat_id=query.message.chat_id,
                 photo=PHOTO_IDS[photo_key],
-                caption=captions.get(data, "جزئیات اثر"),
+                caption=detailed_captions.get(data, "جزئیات کامل اثر"),
                 reply_markup=InlineKeyboardMarkup(kb),
                 parse_mode="Markdown"
             )
             await query.message.delete()
         except Exception as e:
             logger.error(f"Error sending photo for {data}: {e}")
-            await query.message.reply_text(captions.get(data, "جزئیات اثر"), reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+            await query.message.reply_text(detailed_captions.get(data, "جزئیات کامل اثر"), reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
 
     elif data == "services":
         keyboard = [[InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_menu")]]
@@ -302,7 +429,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "workflow":
         keyboard = [[InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_menu")]]
-        text = "⚙️ **فرآیند کار ما:**\n\n۱. ثبت درخواست و مشاوره اولیه\n۲. بررسی فیلمنامه، طرح یا ایده\n۳. عقد قرارداد و پیش‌تولید\n۴. تولید و فیلم‌برداری\n۵. پس‌تولید، تدوین و اصلاح رنگ\n۶. تحویل نهایی اثر"
+        text = "⚙️️ **فرآیند کار ما:**\n\n۱. ثبت درخواست و مشاوره اولیه\n۲. بررسی فیلمنامه، طرح یا ایده\n۳. عقد قرارداد و پیش‌تولید\n۴. تولید و فیلم‌‌برداری\n۵. پس‌تولید، تدوین و اصلاح رنگ\n۶. تحویل نهایی اثر"
         try:
             await query.message.delete()
         except Exception:
@@ -335,7 +462,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "digital_card":
         keyboard = [
-            [InlineKeyboardButton("🌐 وب‌‌سایت رسمی", url="https://alibahador.ir")],
+            [InlineKeyboardButton("🌐 وب‌سایت رسمی", url="https://alibahador.ir")],
             [InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_menu")]
         ]
         card_text = "💳 **کارت ویزیت دیجیتال:**\n\n👤 مدیرعامل: علی بهادر\n🎯 تخصص: کارگردانی، تهیه‌کنندگی و نویسندگی\n🌐 وب‌سایت: alibahador.ir"
@@ -517,7 +644,7 @@ def main():
     application.add_handler(contact_conv_handler)
     application.add_handler(CallbackQueryHandler(button_handler))
     
-    logger.info("Bahador Film Bot is starting and polling for updates...")
+    logger.info("Bahador Film Bot is running and polling for updates...")
     application.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
